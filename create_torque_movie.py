@@ -230,7 +230,7 @@ def process_and_save_frame(args):
         ax4.plot(tqwk_time_full, tqwk_torque_smoothed_full, label='Torque (tqwk0)', ls='--', lw=2, color='deepskyblue', zorder=10)
     if np.any(plot_mask_avg):
         ax4.plot(source_time_avg[plot_mask_avg], cumulative_avg, color='black', lw=2, ls='-', label=avg_label, zorder=50)
-    ax4.set_xlim(0, time_array.max()); ax4.set_xlabel("Time [Orbits]"); ax4.set_ylabel(r"$\Gamma_{\mathrm{planet}} / \Gamma_0$")
+    ax4.set_xlim(0, min(time_array.max(), 1000)); ax4.set_xlabel("Time [Orbits]"); ax4.set_ylabel(r"$\Gamma_{\mathrm{planet}} / \Gamma_0$")
     ax4.grid(True, which='both', linestyle='--', linewidth=0.5); ax4.legend(loc='upper right', fontsize='small')
     ax4.set_yscale('linear'); ax4.set_ylim(ylim_ax4)
     ax4.axhline(0, color='black', lw=1, ls='--', zorder=100)
