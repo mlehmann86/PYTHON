@@ -1,4 +1,4 @@
-# plot_torque_evolution_v18.py
+# plot_torque_evolution_v24.py
 
 import os
 import sys
@@ -9,7 +9,6 @@ from scipy.ndimage import uniform_filter1d
 from tqdm import tqdm
 import multiprocessing
 from scipy.integrate import cumulative_trapezoid
-
 
 # Custom modules from your repository
 from data_reader import (
@@ -45,14 +44,15 @@ def compute_local_profiles(gasdens_3d, gasenergy_3d, gasvx_3d, gasvy_3d, xgrid, 
         gasenergy_2d = np.mean(gasenergy_3d, axis=2)
         gasvx_2d = np.mean(gasvx_3d, axis=2)
         gasvy_2d = np.mean(gasvy_3d, axis=2)
-    else: # Data is already 2D
+    else:
         gasdens_2d = np.squeeze(gasdens_3d, axis=2) if gasdens_3d.ndim == 3 else gasdens_3d
         gasenergy_2d = np.squeeze(gasenergy_3d, axis=2) if gasenergy_3d.ndim == 3 else gasenergy_3d
         gasvx_2d = np.squeeze(gasvx_3d, axis=2) if gasvx_3d.ndim == 3 else gasvx_3d
         gasvy_2d = np.squeeze(gasvy_3d, axis=2) if gasvy_3d.ndim == 3 else gasvy_3d
 
     sigma_profile = np.mean(gasdens_2d, axis=0)
-    pressure_profile = np.mean(gasenergy_2d, axis=0) * (gamma - 1.0)
+    # CORRECTED: gasenergy from read_single_snapshot already includes (gamma-1)
+    pressure_profile = np.mean(gasenergy_2d, axis=0)
     temp_profile = pressure_profile / sigma_profile
 
     log_r = np.log(xgrid)
@@ -65,10 +65,9 @@ def compute_local_profiles(gasdens_3d, gasenergy_3d, gasvx_3d, gasvy_3d, xgrid, 
     x_s_local = 1.1 * np.sqrt(qp / h0)
     hs_mask = (xgrid >= 1.0 - x_s_local) & (xgrid <= 1.0 + x_s_local)
     
-    # Reynolds stress formula for alpha
     gasvx0_2d = np.broadcast_to(gasvx0_1d, (gasvx_2d.shape[0], gasvx_2d.shape[1]))
-    numerator = np.mean(gasdens_2d[:, hs_mask] * gasvy_2d[:, hs_mask] * (gasvx_2d[:, hs_mask] - gasvx0_2d[:, hs_mask]))
     denominator = np.mean(pressure_profile[hs_mask])
+    numerator = np.mean(gasdens_2d[:, hs_mask] * gasvy_2d[:, hs_mask] * (gasvx_2d[:, hs_mask] - gasvx0_2d[:, hs_mask]))
     alpha_hs_avg = numerator / denominator if denominator != 0 else 0.0
 
     p_avg = np.mean(p_profile[hs_mask])
@@ -119,46 +118,46 @@ def plot_average_torque_profile(time_avg_profile, xgrid, x_s, simname, h0, gamma
     """
     fig, ax = plt.subplots(figsize=(12, 7))
     
-    # New radial axis in units of local scale heights
+    fontsize = 16
+    
     r_p = 1.0
     x_axis_H = (xgrid - r_p) / h0
 
-    # Rescale torque density as requested
     torque_density_scaled = time_avg_profile * -gamma_eff
     
-    # Calculate cumulative torque
     cumulative_torque = cumulative_trapezoid(torque_density_scaled, xgrid, initial=0)
 
-    # Plot torque density
-    ax.plot(x_axis_H, torque_density_scaled, color='black', label='Time-Averaged Torque Density')
+    ax.plot(x_axis_H, torque_density_scaled, color='black', label='Time-Averaged Torque Density', linewidth=2.5)
 
-    # Create a secondary y-axis for the cumulative torque
     ax2 = ax.twinx()
-    ax2.plot(x_axis_H, cumulative_torque, color='purple', linestyle=':', label='Cumulative Torque')
+    ax2.plot(x_axis_H, cumulative_torque, color='purple', linestyle=':', label='Cumulative Torque', linewidth=2.5)
     
-    # Mark Lindblad Resonances
-    for m in [2, 3, 4, 5]:
+    m_high_order = 20
+    for m in [m_high_order]:
         r_L_outer = (1 + 1/m)**(2/3)
         r_L_inner = (1 - 1/m)**(2/3)
         x_L_outer_H = (r_L_outer - r_p) / h0
         x_L_inner_H = (r_L_inner - r_p) / h0
-        # Only label the first set of lines to avoid clutter
-        label_outer = f'm={m} OLR' if m == 2 else None
-        label_inner = f'm={m} ILR' if m == 2 else None
-        ax.axvline(x_L_outer_H, color='gray', linestyle='--', lw=1, label=label_outer)
-        ax.axvline(x_L_inner_H, color='gray', linestyle='-.', lw=1, label=label_inner)
+        ax.axvline(x_L_outer_H, color='gray', linestyle='--', lw=1.5, label=f'High-Order OLR')
+        ax.axvline(x_L_inner_H, color='gray', linestyle='-.', lw=1.5, label=f'High-Order ILR')
+        
+    x_s_H = x_s / h0
+    ax.axvspan(-x_s_H, x_s_H, color='red', alpha=0.2, label=f'Corotation Region (xs={x_s:.3f})')
         
     ax.axhline(0, color='black', linestyle='-', linewidth=0.8)
-    ax.set_xlim(-10,10)
-    ax.set_xlabel(r"$(r - r_p) / H_p$")
-    ax.set_ylabel(r"Torque Density $(-\gamma_{eff} d\Gamma/dr) / \Gamma_0$")
-    ax2.set_ylabel(r"Cumulative Torque $(-\gamma_{eff} \Gamma) / \Gamma_0$", color='purple')
-    ax2.tick_params(axis='y', labelcolor='purple')
-    ax.set_title(f"Time-Averaged Torque Profile for {simname}")
+    ax.set_xlabel(r"$(r - r_p) / H_p$", fontsize=fontsize)
+    ax.set_ylabel(r"Torque Density $(-\gamma_{eff} d\Gamma/dr) / (\Gamma_0/\gamma)$", fontsize=fontsize)
+    ax2.set_ylabel(r"Cumulative Torque $(-\gamma_{eff} \Gamma) / (\Gamma_0/\gamma)$", color='purple', fontsize=fontsize)
+    ax.set_title(f"Time-Averaged Torque Profile for {simname}", fontsize=fontsize + 2)
+    
+    ax.set_xlim(x_axis_H.min(), x_axis_H.max())
+    
+    ax.tick_params(axis='both', which='major', labelsize=fontsize-2)
+    ax2.tick_params(axis='y', labelcolor='purple', labelsize=fontsize-2)
     
     lines, labels = ax.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax.legend(lines + lines2, labels + labels2, loc='upper right')
+    ax.legend(lines + lines2, labels + labels2, loc='upper right', fontsize=fontsize - 2)
 
     ax.grid(True, linestyle=":", alpha=0.6)
     
@@ -191,7 +190,6 @@ def main(simname, start_snap, end_snap, num_cores):
         gasvx0_3d = gasvx0_flat.reshape(ny, nx, nz)
         gasvx0 = np.mean(gasvx0_3d, axis=(0, 2))
     except (FileNotFoundError, ValueError):
-        print("Warning: 'gasvxI0.dat' not found. Using Keplerian profile (likely wrong).")
         gasvx0 = xgrid**(-0.5)
 
     nt_max = determine_nt(base_path)
@@ -204,34 +202,28 @@ def main(simname, start_snap, end_snap, num_cores):
     uses_td = "-DTHERMALDIFFUSION" in open(summary_file).read()
     x_s = extract_xs(simname, chi_simulation=uses_td, beta_simulation=not uses_td)
 
-    #Slightly increase x_s
-    x_s = x_s*1.2
+    x_s *=1.3 #empirical correction
 
     task_args = [(i, base_path, xgrid, ygrid, zgrid, gasvx0, params, qp, gam0, h0, thick_smooth, flaring_index, x_s) for i in snapshot_range]
 
-    print("Starting Stage 1: Parallel data extraction...")
     with multiprocessing.Pool(processes=num_cores) as pool:
         results = list(tqdm(pool.starmap(process_snapshot, task_args), total=len(task_args)))
-    print("Stage 1 complete.")
     
     raw_data = {key: np.array([r[key] for r in results]) for key in results[0]}
     
     _, _, _, gamma_eff, _, _ = compute_theoretical_torques_PK11(params, qp, simname, summary_file=summary_file)
 
-    time_avg_profile = np.mean(raw_data['torque_profile'], axis=0) * gamma_eff
+    time_avg_profile = np.mean(raw_data['torque_profile'], axis=0)
     profile_pdf_path = plot_average_torque_profile(time_avg_profile, xgrid, x_s, simname, h0, gamma_eff)
 
     libration_period_orbits = (4.0 * np.pi) / (3.0 * x_s)
     libration_width_snaps = libration_period_orbits / orbits_per_snap
     lindblad_width_snaps = LINDBLAD_SMOOTHING_ORBITS / orbits_per_snap
     
-    print("Starting Stage 2: Averaging data and calculating theoretical torques...")
-    
     sim_corotation_smooth = boxcar_average(raw_data['sim_corotation'], libration_width_snaps)
     sim_lindblad_smooth = boxcar_average(raw_data['sim_lindblad'], lindblad_width_snaps)
 
     alpha_smooth = boxcar_average(raw_data['alpha'], libration_width_snaps)
-    alpha_smooth[alpha_smooth < 1e-10] = 1e-10
     p_smooth = boxcar_average(raw_data['p'], lindblad_width_snaps)
     q_smooth = boxcar_average(raw_data['q'], lindblad_width_snaps)
 
@@ -244,14 +236,16 @@ def main(simname, start_snap, end_snap, num_cores):
         temp_params = params.copy()
         temp_params['SIGMASLOPE'] = p_smooth[i]
         temp_params['FLARINGINDEX'] = (1.0 - q_smooth[i]) / 2.0
-        nu_turb = alpha_smooth[i] * h0**2
+        
+        nu_turb = alpha_smooth[i] * h0**2 if alpha_smooth[i] > 0 else 0.0
+        
         temp_params['NU'] = nu_laminar + nu_turb
         temp_params['CHI'] = chi_laminar
 
         total_torque, lindblad_torque, _, _, _, _ = compute_theoretical_torques_PK11(
             temp_params, qp, simname, summary_file=summary_file
         )
-        corotation_torque = total_torque - lindblad_torque
+        corotation_torque = total_torque - lindblad_torque if alpha_smooth[i] > 0 else np.nan
         
         pred_lindblad_series.append(lindblad_torque)
         pred_corotation_series.append(corotation_torque)
@@ -260,36 +254,74 @@ def main(simname, start_snap, end_snap, num_cores):
         tqwk_file = os.path.join(base_path, "tqwk0.dat")
         tqwk_time_raw, tqwk_torque_raw, _ = read_alternative_torque(tqwk_file)
         tqwk_time_orbits = tqwk_time_raw / (2.0 * np.pi)
-        tqwk_torque_norm = -tqwk_torque_raw * (qp / gam0)
-        tqwk_torque_interp = np.interp(time_array, tqwk_time_orbits, tqwk_torque_norm)
-        total_torque_smooth = boxcar_average(tqwk_torque_interp, libration_width_snaps)
+        tqwk_torque_norm = (tqwk_torque_raw * qp) / gam0 # Torque ON PLANET
     except Exception:
-        total_torque_smooth = np.full_like(time_array, np.nan)
-
-    print("Stage 2 complete.")
+        tqwk_time_orbits = time_array
+        tqwk_torque_norm = np.full_like(time_array, np.nan)
     
-    fig, (ax1, ax2, ax3) = plt.subplots(3, 1, figsize=(14, 18), sharex=True, gridspec_kw={'height_ratios': [2, 1, 1]})
-
-    ax1.plot(time_array, -sim_lindblad_smooth * gamma_eff, label=f"Sim. Lindblad (Smoothed {LINDBLAD_SMOOTHING_ORBITS:.0f} orbits)", color="blue")
-    ax1.plot(time_array, -sim_corotation_smooth * gamma_eff, label=f"Sim. Corotation (Smoothed {libration_period_orbits:.1f} orbits)", color="red")
-    ax1.plot(time_array, np.array(pred_lindblad_series) * gamma_eff, label="Pred. Lindblad", color="blue", linestyle="--")
-    ax1.plot(time_array, np.array(pred_corotation_series) * gamma_eff, label="Pred. Corotation", color="red", linestyle="--")
-    ax1.plot(time_array, (np.array(pred_corotation_series) + np.array(pred_lindblad_series)) * gamma_eff, label="Pred. total", color="black", linestyle="--")
-    ax1.plot(time_array, total_torque_smooth * gamma_eff, label="Total Torque (from tqwk0.dat)", color="black", linewidth=2.5)
+    # CORRECTED: Cumulative average calculation based on plot_cos_torque_comparison.py
+    cumulative_tqwk_torque = np.cumsum(tqwk_torque_norm) / (np.arange(len(tqwk_torque_norm)) + 1)
     
-    ax1.set_ylabel(r"$\gamma_{eff} \Gamma / \Gamma_0$")
-    ax1.legend()
+    sim_total_torque_on_planet = - (raw_data['sim_lindblad'] + raw_data['sim_corotation'])
+    cumulative_sim_torque = np.cumsum(sim_total_torque_on_planet) / (np.arange(len(time_array)) + 1)
 
-    ax2.plot(time_array, raw_data['p'], color='orange', alpha=0.3)
-    ax2.plot(time_array, p_smooth, label=f"p (Smoothed {LINDBLAD_SMOOTHING_ORBITS:.0f} orbits)", color="orange")
-    ax2.plot(time_array, raw_data['q'], color='purple', alpha=0.3)
-    ax2.plot(time_array, q_smooth, label=f"q (Smoothed {LINDBLAD_SMOOTHING_ORBITS:.0f} orbits)", color="purple")
-    ax2.legend()
+    fontsize = 16
+    linewidth = 2.5
     
-    ax3.plot(time_array, np.abs(raw_data['alpha']), color='green', alpha=0.3)
-    ax3.plot(time_array, np.abs(alpha_smooth), label=r"$|\alpha|$ (Smoothed over $t_{lib}$)", color="green")
-    ax3.set_yscale('log')
-    ax3.legend()
+    fig, axes = plt.subplots(5, 1, figsize=(14, 25), sharex=True)
+    ax1, ax2, ax3, ax4, ax5 = axes.flatten()
+
+    # Torque on planet = -Torque on disk
+    ax1.plot(time_array, -sim_lindblad_smooth * gamma_eff, label=f"Sim. Lindblad", color="blue", linewidth=linewidth)
+    ax1.plot(time_array, np.array(pred_lindblad_series) * gamma_eff, label="Pred. Lindblad", color="blue", linestyle="--", linewidth=linewidth)
+    ax1.set_ylabel(r"$\Gamma_L / \Gamma_0$", fontsize=fontsize)
+    ax1.legend(fontsize=fontsize-2)
+
+    ax2.plot(time_array, -sim_corotation_smooth * gamma_eff, label=f"Sim. Corotation", color="red", linewidth=linewidth)
+    ax2.plot(time_array, np.array(pred_corotation_series) * gamma_eff, label="Pred. Corotation", color="red", linestyle="--", linewidth=linewidth)
+    ax2.set_ylabel(r"$\Gamma_C / \Gamma_0$", fontsize=fontsize)
+    ax2.legend(fontsize=fontsize-2)
+    
+    # Plotting cumulative torque ON PLANET
+    ax3.plot(time_array, cumulative_sim_torque * gamma_eff, label="Cumulative Sim. Torque (L+C)", color="green", linewidth=linewidth)
+    ax3.plot(tqwk_time_orbits, cumulative_tqwk_torque * gamma_eff, label="Cumulative Torque (from tqwk0.dat)", color="black", linewidth=linewidth)
+    ax3.axhline(0, color='gray', linestyle=':', lw=1.5)
+    ax3.set_ylabel(r"Cumulative $\Gamma_{tot} / \Gamma_0$", fontsize=fontsize)
+    ax3.legend(fontsize=fontsize-2)
+
+    # Dynamically set y-limits based on data
+    all_vals = np.concatenate([
+        cumulative_sim_torque * gamma_eff,
+        cumulative_tqwk_torque * gamma_eff
+    ])
+    y_min = max(-10, np.min(all_vals))
+    y_max = min(10, np.max(all_vals))
+    ax3.set_ylim(y_min, y_max)
+
+    ax4.plot(time_array, raw_data['p'], color='orange', alpha=0.3)
+    ax4.plot(time_array, p_smooth, label=f"p (Smoothed)", color="orange", linewidth=linewidth)
+    ax4.plot(time_array, raw_data['q'], color='purple', alpha=0.3)
+    ax4.plot(time_array, q_smooth, label=f"q (Smoothed)", color="purple", linewidth=linewidth)
+    ax4.legend(fontsize=fontsize-2)
+    ax4.set_ylabel("Slopes", fontsize=fontsize)
+
+    raw_alpha_pos = np.where(raw_data['alpha'] > 0, raw_data['alpha'], np.nan)
+    alpha_smooth_pos = np.where(alpha_smooth > 0, alpha_smooth, np.nan)
+    ax5.plot(time_array, raw_alpha_pos, color='green', alpha=0.3, label=r"Raw Positive $\alpha$")
+    ax5.plot(time_array, alpha_smooth_pos, label=r"Smoothed Positive $\alpha$", color="green", linewidth=linewidth)
+    
+    alpha_laminar = nu_laminar / (h0**2)
+    if alpha_laminar > 0:
+        ax5.axhline(alpha_laminar, color='gray', linestyle='--', label=f'Laminar $\\alpha = {alpha_laminar:.2e}$', linewidth=linewidth)
+    ax5.set_yscale('log')
+    ax5.set_ylim(bottom=1e-7)
+    ax5.legend(fontsize=fontsize-2)
+    ax5.set_ylabel(r"Turbulent $\alpha$", fontsize=fontsize)
+    ax5.set_xlabel("Time [Orbits]", fontsize=fontsize)
+
+    for ax in axes:
+        ax.grid(True, linestyle=":", alpha=0.7)
+        ax.tick_params(axis='both', which='major', labelsize=fontsize-2)
 
     plt.tight_layout(pad=2.0)
     main_plot_filename = f"torque_evolution_{simname}.pdf"
@@ -304,7 +336,7 @@ if __name__ == "__main__":
     parser.add_argument("simname", type=str, help="Simulation subdirectory name.")
     parser.add_argument("--start", type=int, default=0, help="Starting snapshot number.")
     parser.add_argument("--end", type=int, default=10000, help="Ending snapshot number.")
-    parser.add_argument("--cores", type=int, default=16, help="Number of CPU cores to use.")
+    parser.add_argument("--parallel", type=int, default=16, help="Number of CPU cores to use.")
     args = parser.parse_args()
         
-    main(args.simname, args.start, args.end, args.cores)
+    main(args.simname, args.start, args.end, args.parallel)

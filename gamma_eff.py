@@ -1003,10 +1003,10 @@ if __name__ == "__main__":
         #HR150
         simulations_3d_beta = [
             "cos_bet1dm4_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D",
-            "cos_bet1dm1_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D",
-            "cos_bet1d0_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D",
-            "cos_bet1d1_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D",
-            "cos_bet1d4_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D"
+            "cos_bet1dm1_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D"#,
+            #"cos_bet1d0_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D",
+            #"cos_bet1d1_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D",
+            #"cos_bet1d4_gam53_p15_q1_r0516_z05_nu1dm11_COR_HR150_3D"
         ]
 #---------------------------------------------------------------------
     simulations_sigmaslope_lr = [
